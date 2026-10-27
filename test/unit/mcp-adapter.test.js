@@ -121,7 +121,7 @@ test("MCP tools complete status, fetch, send, file send, and listUsers with mock
         accountId: "bot_mcp",
         token: "bot_secret_mcp",
         baseUrl: server.baseUrl,
-        ownerUserId: "bot_owner_001"
+        ownerUserId: "user_opaque_001"
       });
       await setAlias(stateDir, "user_opaque_001", "MCP测试用户");
       const context = makeContext(stateDir, server);

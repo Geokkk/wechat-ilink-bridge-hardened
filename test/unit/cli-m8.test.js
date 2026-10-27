@@ -55,7 +55,7 @@ test("wxb fetch --download-media saves image attachments and returns absolute pa
           status: "confirmed",
           bot_token: "bot_secret_m8",
           ilink_bot_id: "bot_m8",
-          ilink_user_id: "owner_m8"
+          ilink_user_id: "user_m8"
         }
       ],
       getUpdatesResponses: [
@@ -66,6 +66,7 @@ test("wxb fetch --download-media saves image attachments and returns absolute pa
             {
               msg_id: "msg_m8_image",
               from_user_id: "user_m8",
+              to_user_id: "user_m8",
               context_token: "ctx_secret_m8",
               timestamp: 1778949153,
               item_list: [

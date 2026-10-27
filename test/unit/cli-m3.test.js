@@ -50,7 +50,7 @@ test("wxb fetch pulls messages, writes local state, and does not leak context to
           status: "confirmed",
           bot_token: "bot_secret_fetch",
           ilink_bot_id: "bot_fetch",
-          ilink_user_id: "owner_fetch"
+          ilink_user_id: "user_fetch"
         }
       ],
       getUpdatesResponses: [
@@ -61,7 +61,7 @@ test("wxb fetch pulls messages, writes local state, and does not leak context to
             {
               msg_id: "msg_fetch_001",
               from_user_id: "user_fetch",
-              to_user_id: "owner_fetch",
+              to_user_id: "user_fetch",
               context_token: "ctx_secret_fetch",
               timestamp: 1715000000,
               item_list: [
@@ -132,7 +132,7 @@ test("wxb fetch suppresses already seen messages on repeated fetch", async () =>
           status: "confirmed",
           bot_token: "bot_secret_fetch",
           ilink_bot_id: "bot_fetch",
-          ilink_user_id: "owner_fetch"
+          ilink_user_id: "user_repeat"
         }
       ],
       getUpdatesResponses: [repeatedMessage]

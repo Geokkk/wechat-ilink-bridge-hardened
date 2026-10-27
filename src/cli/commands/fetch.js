@@ -35,7 +35,8 @@ export async function runFetchCommand(argv, context) {
     },
     client: context.client,
     downloadMedia: flags.downloadMedia === true || flags.media === true,
-    mediaFetchImpl: context.mediaFetchImpl
+    mediaFetchImpl: context.mediaFetchImpl,
+    includeUntrusted: flags.includeUntrusted === true
   });
 
   return cliSuccess(result);

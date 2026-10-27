@@ -113,7 +113,8 @@ export async function fetchMessages(options = {}) {
     client: providedClient,
     retry = {},
     downloadMedia = false,
-    mediaFetchImpl
+    mediaFetchImpl,
+    includeUntrusted = false
   } = options;
 
   if (!stateDir) {
@@ -125,6 +126,8 @@ export async function fetchMessages(options = {}) {
     baseUrl: account.baseUrl ?? config.baseUrl,
     channelVersion: config.channelVersion
   });
+
+  const ownerUserId = account.ownerUserId;
 
   return withAccountLock(stateDir, account.accountId, async () => {
     const previousBuffer = await readSyncBuffer(stateDir, account.accountId);
@@ -141,17 +144,35 @@ export async function fetchMessages(options = {}) {
     const normalizedMessages = ensureMessageIds(normalized.messages);
     const seenIds = new Set(await readSeenIds(stateDir, account.accountId));
     const unseenMessages = normalizedMessages.filter((message) => !seenIds.has(message.id));
-    const messages = downloadMedia
-      ? await downloadMessagesMedia(unseenMessages, {
+
+    // Separate trusted and untrusted messages
+    const trustedMessages = [];
+    const untrustedMessages = [];
+    for (const message of unseenMessages) {
+      const isTrusted = ownerUserId && message.fromUserId === ownerUserId;
+      if (isTrusted) {
+        trustedMessages.push(message);
+      } else {
+        untrustedMessages.push(message);
+      }
+    }
+
+    // Process trusted messages for media download
+    const processedTrusted = downloadMedia
+      ? await downloadMessagesMedia(trustedMessages, {
         stateDir,
         accountId: account.accountId,
         config,
         fetchImpl: mediaFetchImpl ?? client.fetchImpl,
         timeoutMs
       })
-      : unseenMessages.map(stripMessageMediaSecrets);
+      : trustedMessages.map(stripMessageMediaSecrets);
+
+    // Process untrusted messages (strip secrets but no media download)
+    const processedUntrusted = untrustedMessages.map(stripMessageMediaSecrets);
+
     const nextBuffer = normalized.getUpdatesBuf ?? previousBuffer;
-    const newMessages = messages;
+    const newMessages = [...processedTrusted, ...processedUntrusted];
 
     for (const message of newMessages) {
       if (message.fromUserId && message.contextToken) {
@@ -164,8 +185,9 @@ export async function fetchMessages(options = {}) {
       await markSeenIds(stateDir, account.accountId, newMessages.map((message) => message.id), { lock: false });
     }
 
+    // Only process delayed deliveries for TRUSTED messages
     const delayedCandidatesByUser = new Map();
-    for (const message of newMessages) {
+    for (const message of processedTrusted) {
       if (!message.fromUserId || !message.contextToken) {
         continue;
       }
@@ -196,6 +218,20 @@ export async function fetchMessages(options = {}) {
 
     await writeSyncBuffer(stateDir, account.accountId, nextBuffer);
 
+    const outputMessages = includeUntrusted ? newMessages : processedTrusted.map(stripInternalMessageFields);
+    if (!includeUntrusted) {
+      // For untrusted messages in default output, we don't include them at all
+      // But we still need to mark them with trusted: true for trusted messages
+      for (const message of outputMessages) {
+        message.trusted = true;
+      }
+    } else {
+      for (const message of outputMessages) {
+        const isTrusted = ownerUserId && message.fromUserId === ownerUserId;
+        message.trusted = isTrusted;
+      }
+    }
+
     return {
       accountId: account.accountId,
       cursor: {
@@ -204,10 +240,11 @@ export async function fetchMessages(options = {}) {
         advanced: nextBuffer !== previousBuffer
       },
       attempts,
-      messages: newMessages.map(stripInternalMessageFields),
+      messages: outputMessages,
       delayedDeliveries,
       rawMessageCount: normalized.messages.length,
-      newMessageCount: newMessages.length
+      newMessageCount: newMessages.length,
+      untrustedCount: untrustedMessages.length
     };
   });
 }

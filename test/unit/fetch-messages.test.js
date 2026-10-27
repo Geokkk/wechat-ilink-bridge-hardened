@@ -27,7 +27,7 @@ async function seedAccount(stateDir, account = {}) {
     accountId: account.accountId ?? "bot_001",
     token: account.token ?? "bot_secret",
     baseUrl: "https://mock.example",
-    ownerUserId: "owner_001"
+    ownerUserId: "user_001"
   });
 }
 
@@ -488,5 +488,175 @@ test("fetchMessages surfaces session expiry and preserves the previous cursor", 
 
     assert.equal(await readSyncBuffer(stateDir, "bot_001"), "old_cursor");
     assert.deepEqual(await readSeenIds(stateDir, "bot_001"), []);
+  });
+});
+
+test("fetchMessages filters untrusted senders by default and adds trusted flag", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const client = fakeUpdatesClient([
+      {
+        ret: 0,
+        get_updates_buf: "cursor_trust",
+        msgs: [
+          {
+            msg_id: "msg_trusted",
+            from_user_id: "user_001",
+            to_user_id: "user_001",
+            context_token: "ctx_trusted",
+            timestamp: 1715000000,
+            item_list: [{ type: 1, text_item: { text: "from owner" } }]
+          },
+          {
+            msg_id: "msg_untrusted",
+            from_user_id: "stranger_001",
+            to_user_id: "user_001",
+            context_token: "ctx_untrusted",
+            timestamp: 1715000001,
+            item_list: [{ type: 1, text_item: { text: "from stranger" } }]
+          }
+        ]
+      }
+    ]);
+
+    const result = await fetchMessages({
+      stateDir,
+      client,
+      retry: { maxAttempts: 1 }
+    });
+
+    // Default: only trusted messages in output
+    assert.equal(result.messages.length, 1);
+    assert.equal(result.messages[0].id, "msg_trusted");
+    assert.equal(result.messages[0].trusted, true);
+    assert.equal(result.untrustedCount, 1);
+    assert.equal(result.newMessageCount, 2); // Both saved to history
+  });
+});
+
+test("fetchMessages includes untrusted messages with --include-untrusted flag", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const client = fakeUpdatesClient([
+      {
+        ret: 0,
+        get_updates_buf: "cursor_trust_all",
+        msgs: [
+          {
+            msg_id: "msg_trusted",
+            from_user_id: "user_001",
+            to_user_id: "user_001",
+            context_token: "ctx_trusted",
+            timestamp: 1715000000,
+            item_list: [{ type: 1, text_item: { text: "from owner" } }]
+          },
+          {
+            msg_id: "msg_untrusted",
+            from_user_id: "stranger_001",
+            to_user_id: "user_001",
+            context_token: "ctx_untrusted",
+            timestamp: 1715000001,
+            item_list: [{ type: 1, text_item: { text: "from stranger" } }]
+          }
+        ]
+      }
+    ]);
+
+    const result = await fetchMessages({
+      stateDir,
+      client,
+      retry: { maxAttempts: 1 },
+      includeUntrusted: true
+    });
+
+    // With flag: both messages in output, marked correctly
+    assert.equal(result.messages.length, 2);
+    const trustedMsg = result.messages.find(m => m.id === "msg_trusted");
+    const untrustedMsg = result.messages.find(m => m.id === "msg_untrusted");
+    assert.equal(trustedMsg.trusted, true);
+    assert.equal(untrustedMsg.trusted, false);
+    assert.equal(result.untrustedCount, 1);
+  });
+});
+
+test("fetchMessages does not trigger delayed delivery for untrusted messages", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    // Queue a delivery for the untrusted user
+    await queueTextDelivery({
+      stateDir,
+      accountId: "bot_001",
+      userId: "stranger_001",
+      text: "should not be sent"
+    });
+    const client = fakeUpdatesClient([
+      {
+        ret: 0,
+        get_updates_buf: "cursor_no_deliver",
+        msgs: [
+          {
+            msg_id: "msg_untrusted",
+            from_user_id: "stranger_001",
+            to_user_id: "user_001",
+            context_token: "ctx_untrusted",
+            timestamp: 1715000000,
+            item_list: [{ type: 1, text_item: { text: "from stranger" } }]
+          }
+        ]
+      }
+    ]);
+
+    const result = await fetchMessages({
+      stateDir,
+      client,
+      retry: { maxAttempts: 1 }
+    });
+
+    // No delayed delivery should be triggered for untrusted sender
+    assert.equal(result.delayedDeliveries.length, 0);
+    assert.equal(result.untrustedCount, 1);
+    // Message still written to history
+    const history = await readMessageHistory(stateDir, "bot_001");
+    assert.equal(history.length, 1);
+    assert.equal(history[0].fromUserId, "stranger_001");
+  });
+});
+
+test("fetchMessages still triggers delayed delivery for trusted messages", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    await queueTextDelivery({
+      stateDir,
+      accountId: "bot_001",
+      userId: "user_001",
+      text: "queued for owner"
+    });
+    const client = fakeUpdatesClient([
+      {
+        ret: 0,
+        get_updates_buf: "cursor_deliver",
+        msgs: [
+          {
+            msg_id: "msg_trusted",
+            from_user_id: "user_001",
+            to_user_id: "user_001",
+            context_token: "ctx_fresh",
+            timestamp: 1715000000,
+            item_list: [{ type: 1, text_item: { text: "from owner" } }]
+          }
+        ]
+      }
+    ]);
+
+    const result = await fetchMessages({
+      stateDir,
+      client,
+      retry: { maxAttempts: 1 }
+    });
+
+    // Delayed delivery should be triggered for trusted sender
+    assert.equal(result.delayedDeliveries.length, 1);
+    assert.equal(result.delayedDeliveries[0].status, "sent");
+    assert.equal(result.delayedDeliveries[0].sent[0].chars, "queued for owner".length);
   });
 });
