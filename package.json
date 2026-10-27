@@ -1,5 +1,5 @@
 {
-  "name": "@dongh4o/wechat-ilink-bridge-hardened",
+  "name": "wechat-ilink-bridge-hardened",
   "version": "0.3.0",
   "private": false,
   "type": "module",
