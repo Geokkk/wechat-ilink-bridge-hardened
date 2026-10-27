@@ -13,7 +13,10 @@ export const protocolDefaults = Object.freeze({
   messageRetentionDays: 30,
   attachmentRetentionDays: 30,
   maxHistoryMessages: 10000,
-  maxUploadBytes: 25 * 1024 * 1024
+  maxUploadBytes: 25 * 1024 * 1024,
+  maxDownloadBytes: 25 * 1024 * 1024,
+  allowedCdnHost: "novac2c.cdn.weixin.qq.com",
+  allowLocalhostCdn: false
 });
 
 export const endpoints = Object.freeze({

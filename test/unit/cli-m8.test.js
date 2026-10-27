@@ -101,7 +101,8 @@ test("wxb fetch --download-media saves image attachments and returns absolute pa
         "--cdn-base-url", server.baseUrl,
         "--download-media",
         "--timeout", "1000",
-        "--max-attempts", "1"
+        "--max-attempts", "1",
+        "--allow-localhost-cdn"
       ])).stdout);
 
       const [message] = parsed.data.messages;

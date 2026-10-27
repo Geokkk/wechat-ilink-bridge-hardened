@@ -21,9 +21,17 @@ function encryptAes128Ecb(buffer, keyHex) {
 }
 
 function fakeFetch(bytes) {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    }
+  });
+  
   return async () => ({
     ok: true,
     status: 200,
+    body: stream,
     async arrayBuffer() {
       return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     }
@@ -37,20 +45,51 @@ function fakeFetchByUrl(values) {
       return {
         ok: false,
         status: 404,
+        body: new ReadableStream(),
         async arrayBuffer() {
           return new ArrayBuffer(0);
         }
       };
     }
 
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes);
+        controller.close();
+      }
+    });
+
     return {
       ok: true,
       status: 200,
+      body: stream,
       async arrayBuffer() {
         return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
       }
     };
   };
+}
+
+function fakeFetchStreaming(totalBytes, chunkSize = 1024) {
+  let sent = 0;
+  const stream = new ReadableStream({
+    async pull(controller) {
+      if (sent >= totalBytes) {
+        controller.close();
+        return;
+      }
+      const chunk = new Uint8Array(Math.min(chunkSize, totalBytes - sent));
+      chunk.fill(0x42); // 'B' byte
+      controller.enqueue(chunk);
+      sent += chunk.length;
+    }
+  });
+  
+  return async () => ({
+    ok: true,
+    status: 200,
+    body: stream
+  });
 }
 
 test("downloads and decrypts AES media into a safe inbox path", async () => {
@@ -68,7 +107,7 @@ test("downloads and decrypts AES media into a safe inbox path", async () => {
             fileId: "image_001",
             fileName: "../CON?.jpg",
             mimeType: "image/jpeg",
-            url: "https://cdn.example/image",
+            url: "https://novac2c.cdn.weixin.qq.com/image",
             aesKey: keyHex
           }
         }
@@ -151,10 +190,10 @@ test("downloads media using encrypt query parameters from the configured CDN", a
       stateDir,
       accountId: "bot_001",
       config: {
-        cdnBaseUrl: "https://cdn.example/c2c/"
+        cdnBaseUrl: "https://novac2c.cdn.weixin.qq.com/c2c/"
       },
       fetchImpl: fakeFetchByUrl({
-        "https://cdn.example/c2c/download?token=abc&fileid=image_nested": encrypted
+        "https://novac2c.cdn.weixin.qq.com/c2c/download?token=abc&fileid=image_nested": encrypted
       })
     });
 
@@ -176,7 +215,7 @@ test("infers common image mime types and extensions from downloaded bytes", asyn
         {
           kind: "image",
           metadata: {
-            url: "https://cdn.example/image"
+            url: "https://novac2c.cdn.weixin.qq.com/image"
           }
         }
       ]
@@ -211,13 +250,13 @@ test("infers common voice and video mime types from downloaded bytes", async () 
         {
           kind: "voice",
           metadata: {
-            url: "https://cdn.example/voice"
+            url: "https://novac2c.cdn.weixin.qq.com/voice"
           }
         },
         {
           kind: "video",
           metadata: {
-            url: "https://cdn.example/video"
+            url: "https://novac2c.cdn.weixin.qq.com/video"
           }
         }
       ]
@@ -226,8 +265,8 @@ test("infers common voice and video mime types from downloaded bytes", async () 
       accountId: "bot_001",
       config: {},
       fetchImpl: fakeFetchByUrl({
-        "https://cdn.example/voice": silkBytes,
-        "https://cdn.example/video": mp4Bytes
+        "https://novac2c.cdn.weixin.qq.com/voice": silkBytes,
+        "https://novac2c.cdn.weixin.qq.com/video": mp4Bytes
       })
     });
 
@@ -251,7 +290,7 @@ test("saves file, voice, and video media as raw attachments when no AES key is p
             fileId: "file_001",
             fileName: "report.pdf",
             mimeType: "application/pdf",
-            url: "https://cdn.example/file"
+            url: "https://novac2c.cdn.weixin.qq.com/file"
           }
         },
         {
@@ -260,7 +299,7 @@ test("saves file, voice, and video media as raw attachments when no AES key is p
             fileId: "voice_001",
             fileName: "voice.silk",
             mimeType: "audio/silk",
-            url: "https://cdn.example/voice"
+            url: "https://novac2c.cdn.weixin.qq.com/voice"
           }
         },
         {
@@ -269,7 +308,7 @@ test("saves file, voice, and video media as raw attachments when no AES key is p
             fileId: "video_001",
             fileName: "clip.mp4",
             mimeType: "video/mp4",
-            url: "https://cdn.example/video"
+            url: "https://novac2c.cdn.weixin.qq.com/video"
           }
         }
       ]
@@ -278,9 +317,9 @@ test("saves file, voice, and video media as raw attachments when no AES key is p
       accountId: "bot_001",
       config: {},
       fetchImpl: fakeFetchByUrl({
-        "https://cdn.example/file": Buffer.from("file bytes"),
-        "https://cdn.example/voice": Buffer.from("voice bytes"),
-        "https://cdn.example/video": Buffer.from("video bytes")
+        "https://novac2c.cdn.weixin.qq.com/file": Buffer.from("file bytes"),
+        "https://novac2c.cdn.weixin.qq.com/voice": Buffer.from("voice bytes"),
+        "https://novac2c.cdn.weixin.qq.com/video": Buffer.from("video bytes")
       })
     });
 
@@ -294,5 +333,156 @@ test("saves file, voice, and video media as raw attachments when no AES key is p
     assert.equal((await readFile(result.attachments[0].path)).toString("utf8"), "file bytes");
     assert.equal((await readFile(result.attachments[1].path)).toString("utf8"), "voice bytes");
     assert.equal((await readFile(result.attachments[2].path)).toString("utf8"), "video bytes");
+  });
+});
+
+test("rejects media download exceeding size limit (streaming)", async () => {
+  await withTempDir(async (stateDir) => {
+    const limit = 1024; // 1 KB limit
+    const oversize = limit + 512;
+    const result = await downloadMessageMedia({
+      id: "msg_oversize",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "https://novac2c.cdn.weixin.qq.com/large.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: { maxDownloadBytes: limit },
+      fetchImpl: fakeFetchStreaming(oversize)
+    });
+
+    assert.equal(result.mediaDownload.failed, 1);
+    assert.equal(result.items[0].download.ok, false);
+    assert.equal(result.items[0].download.error.code, "MEDIA_DOWNLOAD_SIZE_EXCEEDED");
+  });
+});
+
+test("rejects media URL with non-HTTPS protocol", async () => {
+  await withTempDir(async (stateDir) => {
+    const result = await downloadMessageMedia({
+      id: "msg_http",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "http://novac2c.cdn.weixin.qq.com/image.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: {},
+      fetchImpl: fakeFetch(Buffer.from("x"))
+    });
+
+    assert.equal(result.mediaDownload.failed, 1);
+    assert.equal(result.items[0].download.ok, false);
+    assert.equal(result.items[0].download.error.code, "MEDIA_URL_NOT_HTTPS");
+  });
+});
+
+test("rejects media URL with non-whitelisted host", async () => {
+  await withTempDir(async (stateDir) => {
+    const result = await downloadMessageMedia({
+      id: "msg_bad_host",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "https://evil.example.com/image.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: {},
+      fetchImpl: fakeFetch(Buffer.from("x"))
+    });
+
+    assert.equal(result.mediaDownload.failed, 1);
+    assert.equal(result.items[0].download.ok, false);
+    assert.equal(result.items[0].download.error.code, "MEDIA_URL_HOST_NOT_ALLOWED");
+  });
+});
+
+test("allows localhost CDN only when explicitly enabled", async () => {
+  await withTempDir(async (stateDir) => {
+    // Default: localhost rejected
+    let result = await downloadMessageMedia({
+      id: "msg_localhost_default",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "https://localhost/image.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: {},
+      fetchImpl: fakeFetch(Buffer.from("x"))
+    });
+    assert.equal(result.mediaDownload.failed, 1);
+    assert.equal(result.items[0].download.error.code, "MEDIA_URL_HOST_NOT_ALLOWED");
+
+    // With allowLocalhostCdn: true, localhost allowed
+    result = await downloadMessageMedia({
+      id: "msg_localhost_allowed",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "https://localhost/image.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: { allowLocalhostCdn: true },
+      fetchImpl: fakeFetch(Buffer.from("x"))
+    });
+    assert.equal(result.mediaDownload.succeeded, 1);
+    assert.equal(result.items[0].download.ok, true);
+  });
+});
+
+test("allows configured CDN host", async () => {
+  await withTempDir(async (stateDir) => {
+    const result = await downloadMessageMedia({
+      id: "msg_custom_cdn",
+      timestamp: 1778949153,
+      items: [
+        {
+          kind: "image",
+          metadata: {
+            url: "https://custom.cdn.example/image.jpg"
+          }
+        }
+      ]
+    }, {
+      stateDir,
+      accountId: "bot_001",
+      config: { allowedCdnHost: "custom.cdn.example" },
+      fetchImpl: fakeFetch(Buffer.from("x"))
+    });
+
+    assert.equal(result.mediaDownload.succeeded, 1);
+    assert.equal(result.items[0].download.ok, true);
   });
 });

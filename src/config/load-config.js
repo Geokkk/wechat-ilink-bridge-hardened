@@ -21,6 +21,9 @@ const envKeyByConfigKey = Object.freeze({
   attachmentRetentionDays: "WX_ATTACHMENT_RETENTION_DAYS",
   maxHistoryMessages: "WX_MAX_HISTORY_MESSAGES",
   maxUploadBytes: "WX_MAX_UPLOAD_BYTES",
+  maxDownloadBytes: "WX_MAX_DOWNLOAD_BYTES",
+  allowedCdnHost: "WX_ALLOWED_CDN_HOST",
+  allowLocalhostCdn: "WX_ALLOW_LOCALHOST_CDN",
   botUserName: "BOT_USER_NAME"
 });
 
@@ -36,7 +39,12 @@ const numberKeys = new Set([
   "messageRetentionDays",
   "attachmentRetentionDays",
   "maxHistoryMessages",
-  "maxUploadBytes"
+  "maxUploadBytes",
+  "maxDownloadBytes"
+]);
+
+const booleanKeys = new Set([
+  "allowLocalhostCdn"
 ]);
 
 function kebabToCamel(value) {
@@ -111,10 +119,14 @@ function coerceValue(key, value) {
   }
 
   if (value === true) {
-    throw new WxbError("CONFIG_VALUE_MISSING", `Configuration option requires a value: ${key}`, {
-      retryable: false,
-      details: { key }
-    });
+    // Only boolean flags can be passed without a value
+    if (!booleanKeys.has(key)) {
+      throw new WxbError("CONFIG_VALUE_MISSING", `Configuration option requires a value: ${key}`, {
+        retryable: false,
+        details: { key }
+      });
+    }
+    return true;
   }
 
   if (numberKeys.has(key)) {

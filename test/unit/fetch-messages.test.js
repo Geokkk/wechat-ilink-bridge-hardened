@@ -229,7 +229,7 @@ test("fetchMessages keeps text output when media download fails", async () => {
                 image_item: {
                   file_id: "image_fail",
                   file_name: "image.jpg",
-                  cdn_url: "https://cdn.example/missing"
+                  cdn_url: "https://novac2c.cdn.weixin.qq.com/missing"
                 }
               }
             ]
@@ -324,7 +324,7 @@ test("fetchMessages skips media downloads for already seen messages", async () =
               image_item: {
                 file_name: "seen.jpg",
                 mime_type: "image/jpeg",
-                cdn_url: "https://cdn.example/seen.jpg"
+                cdn_url: "https://novac2c.cdn.weixin.qq.com/seen.jpg"
               }
             }
           ]
@@ -332,14 +332,20 @@ test("fetchMessages skips media downloads for already seen messages", async () =
       ]
     };
     const client = fakeUpdatesClient([response, response]);
+    
+    // Streaming fetch implementation that tracks calls
     const mediaFetchImpl = async () => {
       mediaFetchCount += 1;
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(Uint8Array.from([0xff, 0xd8, 0xff]));
+          controller.close();
+        }
+      });
       return {
         ok: true,
         status: 200,
-        async arrayBuffer() {
-          return Uint8Array.from([0xff, 0xd8, 0xff]).buffer;
-        }
+        body: stream
       };
     };
 

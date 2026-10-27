@@ -12,6 +12,11 @@ const reservedWindowsNames = new Set([
   "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
 ]);
 
+// Default download size limit: 25 MiB
+const DEFAULT_MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024;
+// Default allowed CDN host
+const DEFAULT_ALLOWED_CDN_HOST = "novac2c.cdn.weixin.qq.com";
+
 function extensionFor(kind, mimeType) {
   if (mimeType === "image/jpeg") {
     return ".jpg";
@@ -186,12 +191,44 @@ function resolveMediaUrl(metadata, config = {}) {
 }
 
 function publicError(code, error) {
+  const messageMap = {
+    "MEDIA_DOWNLOAD_FAILED": "Media download failed before the attachment could be saved.",
+    "MEDIA_URL_NOT_HTTPS": "Media URL must use HTTPS.",
+    "MEDIA_URL_HOST_NOT_ALLOWED": "Media URL host is not allowed.",
+    "MEDIA_DOWNLOAD_SIZE_EXCEEDED": "Media download exceeded maximum allowed size."
+  };
+  
   return {
     code,
-    message: code === "MEDIA_DOWNLOAD_FAILED"
+    message: messageMap[code] ?? (code === "MEDIA_DOWNLOAD_FAILED"
       ? "Media download failed before the attachment could be saved."
-      : error?.message ?? String(error)
+      : error?.message ?? String(error))
   };
+}
+
+function validateMediaUrl(url, config = {}) {
+  const parsed = new URL(url);
+  
+  // Host whitelist check
+  const allowedHost = config.allowedCdnHost ?? DEFAULT_ALLOWED_CDN_HOST;
+  const allowLocalhost = config.allowLocalhostCdn === true;
+  
+  // Check host first
+  if (!allowLocalhost && parsed.hostname !== allowedHost) {
+    throw new Error("MEDIA_URL_HOST_NOT_ALLOWED");
+  }
+  
+  // Allow localhost for testing only when explicitly enabled
+  if (allowLocalhost && parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1" && parsed.hostname !== allowedHost) {
+    throw new Error("MEDIA_URL_HOST_NOT_ALLOWED");
+  }
+  
+  // Must be HTTPS, except for localhost when explicitly allowed
+  if (parsed.protocol !== "https:") {
+    if (!(allowLocalhost && (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1"))) {
+      throw new Error("MEDIA_URL_NOT_HTTPS");
+    }
+  }
 }
 
 async function fetchMediaBytes(url, options = {}) {
@@ -199,11 +236,16 @@ async function fetchMediaBytes(url, options = {}) {
   if (!fetchImpl) {
     throw new Error("global fetch is unavailable; use Node.js 18+ or pass fetchImpl.");
   }
+  
+  // Validate URL before fetching
+  validateMediaUrl(url, options.config ?? {});
 
   const controller = options.timeoutMs ? new AbortController() : undefined;
   const timeout = controller
     ? setTimeout(() => controller.abort(new Error("media download timeout")), options.timeoutMs)
     : undefined;
+
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_DOWNLOAD_BYTES;
 
   try {
     const response = await fetchImpl(url, {
@@ -215,7 +257,28 @@ async function fetchMediaBytes(url, options = {}) {
       throw new Error(`media HTTP ${response.status}`);
     }
 
-    return Buffer.from(await response.arrayBuffer());
+    // Stream the response body and count bytes
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("Response body is not readable");
+    }
+
+    const chunks = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      chunks.push(value);
+      totalBytes += value.length;
+      
+      if (totalBytes > maxBytes) {
+        throw new Error("MEDIA_DOWNLOAD_SIZE_EXCEEDED");
+      }
+    }
+
+    return Buffer.concat(chunks);
   } finally {
     if (timeout) {
       clearTimeout(timeout);
@@ -246,7 +309,7 @@ async function downloadMediaItem({ stateDir, accountId, message, item, itemIndex
       };
     }
 
-    const encryptedBytes = await fetchMediaBytes(url, { fetchImpl, timeoutMs });
+    const encryptedBytes = await fetchMediaBytes(url, { fetchImpl, timeoutMs, config, maxBytes: config.maxDownloadBytes });
     const decoded = decryptAes128Ecb(encryptedBytes, metadata.aesKey);
     const detectedMimeType = metadata.mimeType ?? detectMimeType(decoded.buffer);
     const downloadedItem = detectedMimeType
@@ -286,13 +349,18 @@ async function downloadMediaItem({ stateDir, accountId, message, item, itemIndex
       attachment
     };
   } catch (error) {
+    const errorMessage = error?.message ?? String(error);
+    // Preserve specific validation error codes
+    const validationCodes = ["MEDIA_URL_NOT_HTTPS", "MEDIA_URL_HOST_NOT_ALLOWED", "MEDIA_DOWNLOAD_SIZE_EXCEEDED"];
+    const code = validationCodes.includes(errorMessage) ? errorMessage : "MEDIA_DOWNLOAD_FAILED";
+    
     return {
       item: {
         ...item,
         metadata: stripMediaSecrets({ metadata }).metadata,
         download: {
           ok: false,
-          error: publicError("MEDIA_DOWNLOAD_FAILED", error)
+          error: publicError(code, error)
         }
       },
       attachment: undefined
