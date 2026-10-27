@@ -48,7 +48,8 @@ export function accountsDir(stateDir) {
 }
 
 export async function ensureStateDir(stateDir) {
-  await mkdir(accountsDir(stateDir), { recursive: true });
+  const dir = accountsDir(stateDir);
+  await mkdir(dir, { recursive: true, mode: 0o700 });
   return stateDir;
 }
 

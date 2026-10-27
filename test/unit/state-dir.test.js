@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -12,7 +12,8 @@ import {
   resolveStateDir,
   safeAccountId
 } from "../../src/state/state-dir.js";
-import { pathExists } from "../../src/state/json-file.js";
+import { pathExists, writeJsonAtomic } from "../../src/state/json-file.js";
+import { appendMessageHistory, replaceMessageHistory } from "../../src/state/message-history.js";
 
 test("expands home-prefixed paths", () => {
   assert.equal(expandHome("~/wxb", "C:\\Users\\tester"), path.join("C:\\Users\\tester", "wxb"));
@@ -61,4 +62,36 @@ test("sanitizes account IDs used in file paths", () => {
     accountStatePath("C:\\tmp\\wxb", "bot:../unsafe", ".json"),
     path.join("C:\\tmp\\wxb", "accounts", "bot_.._unsafe.json")
   );
+});
+
+test("ensures state directory and account files have restricted permissions on POSIX", async () => {
+  if (process.platform === "win32") {
+    return; // Windows: permissions not enforceable, documented in code
+  }
+  const dir = await mkdtemp(path.join(os.tmpdir(), "wxb-perm-"));
+  try {
+    const stateDir = path.join(dir, "state");
+    await ensureStateDir(stateDir);
+    const accountsDirPath = accountsDir(stateDir);
+    const dirStat = await stat(accountsDirPath);
+    // Directory should be 0700 (owner only)
+    assert.equal(dirStat.mode & 0o777, 0o700);
+
+    const accountFile = accountStatePath(stateDir, "test-bot", ".json");
+    await writeJsonAtomic(accountFile, { token: "secret", accountId: "test-bot" });
+    const fileStat = await stat(accountFile);
+    // File should be 0600 (owner only)
+    assert.equal(fileStat.mode & 0o777, 0o600);
+
+    const historyFile = path.join(accountsDirPath, "test-bot.messages.jsonl");
+    await appendMessageHistory(stateDir, "test-bot", { id: "msg1", text: "hello" });
+    const historyStat = await stat(historyFile);
+    assert.equal(historyStat.mode & 0o777, 0o600);
+
+    await replaceMessageHistory(stateDir, "test-bot", [{ id: "msg2", text: "world" }]);
+    const replacedStat = await stat(historyFile);
+    assert.equal(replacedStat.mode & 0o777, 0o600);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

@@ -259,8 +259,8 @@ async function downloadMediaItem({ stateDir, accountId, message, item, itemIndex
       }
       : item;
     const { dir, filePath, fileName } = buildInboxPath({ stateDir, accountId, message, item: downloadedItem, itemIndex });
-    await mkdir(dir, { recursive: true });
-    await writeFile(filePath, decoded.buffer);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    await writeFile(filePath, decoded.buffer, { mode: 0o600 });
 
     const attachment = {
       kind: item.kind,

@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { access, mkdir, open, readFile, rename, rm } from "node:fs/promises";
+import { access, mkdir, open, readFile, rename, rm, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { WxbError } from "../core/errors.js";
@@ -63,16 +63,17 @@ export async function readJsonFile(filePath, defaultValue = undefined) {
 
 export async function writeJsonAtomic(filePath, value) {
   const dir = path.dirname(filePath);
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
 
   const tempPath = path.join(dir, `.${path.basename(filePath)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
-  const handle = await open(tempPath, "w");
+  const handle = await open(tempPath, "w", 0o600);
 
   try {
     await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8");
     await handle.sync();
     await handle.close();
     await renameWithRetry(tempPath, filePath);
+    await chmod(filePath, 0o600);
   } catch (error) {
     try {
       await handle.close();

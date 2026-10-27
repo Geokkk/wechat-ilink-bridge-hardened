@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, rm, writeFile, chmod } from "node:fs/promises";
 import path from "node:path";
 import { WxbError } from "../core/errors.js";
 import { accountStatePath } from "./state-dir.js";
@@ -11,9 +11,9 @@ export function messageHistoryFilePath(stateDir, accountId) {
 export async function appendMessageHistory(stateDir, accountId, messageOrMessages) {
   const messages = Array.isArray(messageOrMessages) ? messageOrMessages : [messageOrMessages];
   const filePath = messageHistoryFilePath(stateDir, accountId);
-  await mkdir(path.dirname(filePath), { recursive: true });
+  await mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
 
-  const handle = await open(filePath, "a");
+  const handle = await open(filePath, "a", 0o600);
   try {
     for (const message of messages) {
       await handle.write(`${JSON.stringify(message)}\n`, "utf8");
@@ -22,6 +22,7 @@ export async function appendMessageHistory(stateDir, accountId, messageOrMessage
   } finally {
     await handle.close();
   }
+  await chmod(filePath, 0o600);
 }
 
 export async function readMessageHistory(stateDir, accountId) {
@@ -57,14 +58,15 @@ export async function readMessageHistory(stateDir, accountId) {
 export async function replaceMessageHistory(stateDir, accountId, messages) {
   const filePath = messageHistoryFilePath(stateDir, accountId);
   const dir = path.dirname(filePath);
-  await mkdir(dir, { recursive: true });
+  await mkdir(dir, { recursive: true, mode: 0o700 });
 
   const tempPath = path.join(dir, `.${path.basename(filePath)}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`);
   const content = messages.map((message) => JSON.stringify(message)).join("\n");
 
   try {
-    await writeFile(tempPath, content ? `${content}\n` : "", "utf8");
+    await writeFile(tempPath, content ? `${content}\n` : "", "utf8", { mode: 0o600 });
     await rename(tempPath, filePath);
+    await chmod(filePath, 0o600);
   } catch (error) {
     await rm(tempPath, { force: true });
     throw error;
