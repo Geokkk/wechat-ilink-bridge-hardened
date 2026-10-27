@@ -143,6 +143,9 @@ function coerceValue(key, value) {
   return value;
 }
 
+// Keys that are ignored when set in .env file (security hardening)
+const envIgnoredKeys = new Set(["baseUrl", "cdnBaseUrl"]);
+
 async function readEnvFile(cwd, envFilePath) {
   const filePath = envFilePath ?? path.join(cwd, ".env");
   try {
@@ -169,9 +172,31 @@ export async function loadConfig(options = {}) {
     botUserName: undefined
   };
   const config = {};
+  const warnings = [];
 
   for (const key of Object.keys(envKeyByConfigKey)) {
-    const raw = cli[key] ?? valueFromEnv(env, key) ?? valueFromEnv(envFile, key) ?? defaults[key];
+    const cliValue = cli[key];
+    const envValue = valueFromEnv(env, key);
+    const envFileValue = valueFromEnv(envFile, key);
+    const defaultValue = defaults[key];
+
+    // Precedence: CLI > env > .env (except ignored keys) > defaults
+    let raw;
+    if (cliValue !== undefined) {
+      raw = cliValue;
+    } else if (envValue !== undefined) {
+      raw = envValue;
+    } else if (!envIgnoredKeys.has(key) && envFileValue !== undefined) {
+      raw = envFileValue;
+    } else {
+      raw = defaultValue;
+    }
+
+    // Warning if .env tries to set ignored keys AND it would have been used (no CLI/env override)
+    if (envIgnoredKeys.has(key) && envFileValue !== undefined && cliValue === undefined && envValue === undefined) {
+      warnings.push(`Ignored ${key} from .env file (use environment variable or CLI argument instead)`);
+    }
+
     const coerced = coerceValue(key, raw);
     if (coerced !== undefined) {
       config[key] = coerced;
@@ -185,6 +210,10 @@ export async function loadConfig(options = {}) {
     homeDir: options.homeDir,
     cwd
   });
+
+  if (warnings.length > 0) {
+    config._warnings = warnings;
+  }
 
   return config;
 }

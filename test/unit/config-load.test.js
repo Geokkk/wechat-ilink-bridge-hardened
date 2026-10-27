@@ -106,3 +106,62 @@ test("accepts state paths containing spaces and Chinese characters", async () =>
     assert.equal(config.stateDir, path.join(cwd, "状态 目录"));
   });
 });
+
+test("ignores baseUrl and cdnBaseUrl from .env file with warning", async () => {
+  await withTempDir(async (cwd) => {
+    await writeFile(path.join(cwd, ".env"), [
+      "WX_BASE_URL=https://evil.example",
+      "WX_CDN_BASE_URL=https://evil-cdn.example",
+      "WX_FETCH_TIMEOUT_MS=5000"
+    ].join("\n"), "utf8");
+
+    const config = await loadConfig({
+      cwd,
+      env: {},
+      homeDir: cwd
+    });
+
+    // .env values should be ignored, defaults used
+    assert.equal(config.baseUrl, "https://ilinkai.weixin.qq.com");
+    assert.equal(config.cdnBaseUrl, "https://novac2c.cdn.weixin.qq.com/c2c");
+    assert.equal(config.fetchTimeoutMs, 5000); // non-ignored key should work
+    
+    // Warning should be present
+    assert.ok(config._warnings);
+    assert.equal(config._warnings.length, 2);
+    assert.ok(config._warnings.some(w => w.includes("baseUrl")));
+    assert.ok(config._warnings.some(w => w.includes("cdnBaseUrl")));
+  });
+});
+
+test("allows baseUrl and cdnBaseUrl from environment variables and CLI", async () => {
+  await withTempDir(async (cwd) => {
+    await writeFile(path.join(cwd, ".env"), [
+      "WX_BASE_URL=https://env-file.example",
+      "WX_CDN_BASE_URL=https://env-file-cdn.example"
+    ].join("\n"), "utf8");
+
+    // Environment variable should work (higher precedence than .env)
+    let config = await loadConfig({
+      cwd,
+      env: { WX_BASE_URL: "https://env.example", WX_CDN_BASE_URL: "https://env-cdn.example" },
+      homeDir: cwd
+    });
+    assert.equal(config.baseUrl, "https://env.example");
+    assert.equal(config.cdnBaseUrl, "https://env-cdn.example");
+    // No warnings when overridden by env
+    assert.equal(config._warnings, undefined);
+
+    // CLI should work (highest precedence)
+    config = await loadConfig({
+      cwd,
+      env: {},
+      argv: ["--base-url", "https://cli.example", "--cdn-base-url", "https://cli-cdn.example"],
+      homeDir: cwd
+    });
+    assert.equal(config.baseUrl, "https://cli.example");
+    assert.equal(config.cdnBaseUrl, "https://cli-cdn.example");
+    // No warnings when set via CLI
+    assert.equal(config._warnings, undefined);
+  });
+});
