@@ -1,6 +1,6 @@
 # WeChat-iLink Bridge (Hardened Fork)
 
-[![CI](https://github.com/DONGH4O/wechat-ilink-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/DONGH4O/wechat-ilink-bridge/actions/workflows/ci.yml)
+[![CI](https://github.com/Geokkk/wechat-ilink-bridge-hardened/actions/workflows/ci.yml/badge.svg)](https://github.com/Geokkk/wechat-ilink-bridge-hardened/actions/workflows/ci.yml)
 
 License: [MIT](LICENSE)
 
