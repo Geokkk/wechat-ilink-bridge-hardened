@@ -1,12 +1,26 @@
-# WeChat-iLink Bridge
+# WeChat-iLink Bridge (Hardened Fork)
 
 [![CI](https://github.com/DONGH4O/wechat-ilink-bridge/actions/workflows/ci.yml/badge.svg)](https://github.com/DONGH4O/wechat-ilink-bridge/actions/workflows/ci.yml)
 
 License: [MIT](LICENSE)
 
+**衍生声明**：本仓库是基于 DONGH4O/wechat-ilink-bridge (MIT) 的加固衍生版。上游地址：https://github.com/DONGH4O/wechat-ilink-bridge，基线 commit：7946df5df89e044401bd20938a6495fa23243667 (v0.2.0)。非腾讯、非 Meta 官方项目。
+
+**Derivative Notice**: This repository is a hardened fork of DONGH4O/wechat-ilink-bridge (MIT). Upstream: https://github.com/DONGH4O/wechat-ilink-bridge, baseline commit: 7946df5df89e044401bd20938a6495fa23243667 (v0.2.0). Not an official Tencent or Meta project.
+
 Public npm bin 公开稳定 CLI bin `wxb` 和 P2 MCP adapter bin `wxb-mcp`；`wxb-spike` 不作为公开 bin 发布。
 
-WeChat-iLink Bridge（`wxb`）是一个面向 AI Agent 的微信 iLink 本地桥接 CLI。当前源码版本为 `0.2.0`：`wxb send` 支持文本、文件、图片和可选 typing 状态，`wxb-mcp` 暴露 fetch/send/status/listUsers/analyzeMedia 工具，上传密钥和 CDN URL 继续只在 bridge 内部流转。当前 npm 已发布版本仍为 M12 beta。
+WeChat-iLink Bridge（`wxb`）是一个面向 AI Agent 的微信 iLink 本地桥接 CLI。当前源码版本为 `0.3.0`：`wxb send` 支持文本、文件、图片和可选 typing 状态，`wxb-mcp` 暴露 fetch/send/status/listUsers/analyzeMedia 工具，上传密钥和 CDN URL 继续只在 bridge 内部流转。
+
+## 加固差异清单
+
+| 编号 | 项目 | 上游行为 | 加固版行为 |
+|------|------|----------|------------|
+| H1 | 凭证/状态文件权限 | 目录默认权限，文件默认权限 | 状态目录 0700，含密文件 0600 (Windows 除外) |
+| H2 | 发信人白名单 | 所有入站消息均输出 | 默认仅输出账号主人消息，`--include-untrusted` 可显式开启 |
+| H3 | 媒体下载防护 | 无大小限制，无主机校验 | 限流 25 MiB、HTTPS 强制、主机白名单 (novac2c.cdn.weixin.qq.com) |
+| H4 | 接口地址防改写 | `.env` 中的 WX_BASE_URL/WX_CDN_BASE_URL 生效 | `.env` 中这两项被忽略，仅环境变量/CLI 可覆盖，输出 warning |
+| H5 | 定期清理交付 | 仅 CLI 命令 | 提供 bash/PowerShell 示例脚本与计划任务配置说明 |
 
 ## P0 能力范围
 
@@ -257,6 +271,38 @@ node .\src\cli\index.js queue clear --user <fromUserId> --json
 ```
 
 当 `send` 因 iLink 返回 `INVALID_CONTEXT_TOKEN` 失败且尚未投递任何分片时，消息会入队。下一次 `fetch` 收到同一用户携带新 context token 的入站消息时，只尝试补发该用户队列中的第一条，避免一次性刷屏。
+
+## 长期运行维护
+
+### 定期清理
+
+建议通过计划任务定期运行 `wxb cleanup`，防止状态目录无限增长。仓库提供两份示例脚本：
+
+- `scripts/cleanup.sh` - Linux/macOS (cron, systemd timer)
+- `scripts/cleanup.ps1` - Windows (Task Scheduler)
+
+默认保留策略与上游一致：
+- 消息历史保留 30 天 (`WX_MESSAGE_RETENTION_DAYS`)
+- 附件保留 30 天 (`WX_ATTACHMENT_RETENTION_DAYS`)
+- 每账号最多 10000 条消息 (`WX_MAX_HISTORY_MESSAGES`)
+
+可通过环境变量覆盖。脚本注释中包含计划任务配置示例。
+
+### 会话过期重扫
+
+当 iLink 返回 `SESSION_EXPIRED` (-14) 时，需重新执行 `wxb login`。长期运行的 Agent 应监听此错误码并自动触发重新登录流程，或在 heartbeat 中检测并告警。
+
+### 状态目录备份警告
+
+**⚠️ 重要**：状态目录（默认 `~/.local/share/wxb`、`~/Library/Application Support/wxb`、`%LOCALAPPDATA%\wxb`）包含：
+- Bot token（长期有效凭证）
+- Context token（会话上下文，可发送消息）
+- 消息历史（含用户隐私）
+
+**严禁**将状态目录提交到任何 git 仓库、上传到公共存储、或包含在发布包中。如需备份，请：
+1. 使用加密工具（如 age、gpg）加密后再存储
+2. 限制访问权限（仅部署账号可读）
+3. 定期轮换 bot token
 
 ## M8 媒体下载
 

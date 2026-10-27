@@ -4,10 +4,8 @@ node_modules/
 !.env.example
 coverage/
 .wxb/
-*.log
-*.tgz
+**/accounts/
+inbox/
 *.stdout.json
-m*-*.stdout.json
-.workbuddy/
-你的真实测试状态目录/
-test/fixtures/raw/live-*.json
+*.tgz
+node_modules/

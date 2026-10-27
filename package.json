@@ -1,15 +1,16 @@
 {
-  "name": "@dongh4o/wechat-ilink-bridge",
-  "version": "0.2.0",
+  "name": "@dongh4o/wechat-ilink-bridge-hardened",
+  "version": "0.3.0",
   "private": false,
   "type": "module",
-  "description": "Local WeChat iLink Bridge CLI for Agent-safe fetch, send, state, and media handoff workflows.",
+  "description": "Hardened fork of DONGH4O/wechat-ilink-bridge (MIT). Local WeChat iLink Bridge CLI for Agent-safe fetch, send, state, and media handoff workflows.",
   "keywords": [
     "wechat",
     "ilink",
     "bot",
     "cli",
-    "agent"
+    "agent",
+    "hardened"
   ],
   "bin": {
     "wxb": "src/cli/index.js",
@@ -19,6 +20,7 @@
     "src/",
     "skills/",
     "docs/",
+    "scripts/",
     "README.md",
     "CHANGELOG.md",
     "LICENSE"
@@ -35,11 +37,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DONGH4O/wechat-ilink-bridge.git"
+    "url": "git+https://github.com/Geokkk/wechat-ilink-bridge-hardened.git"
   },
   "bugs": {
-    "url": "https://github.com/DONGH4O/wechat-ilink-bridge/issues"
+    "url": "https://github.com/Geokkk/wechat-ilink-bridge-hardened/issues"
   },
-  "homepage": "https://github.com/DONGH4O/wechat-ilink-bridge#readme",
+  "homepage": "https://github.com/Geokkk/wechat-ilink-bridge-hardened#readme",
   "license": "MIT"
 }

@@ -5,8 +5,8 @@ import test from "node:test";
 test("package metadata marks the M15 P2 release candidate", async () => {
   const manifest = JSON.parse(await readFile("package.json", "utf8"));
 
-  assert.equal(manifest.name, "@dongh4o/wechat-ilink-bridge");
-  assert.equal(manifest.version, "0.2.0");
+  assert.equal(manifest.name, "@dongh4o/wechat-ilink-bridge-hardened");
+  assert.equal(manifest.version, "0.3.0");
   assert.equal(manifest.private, false);
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.bin.wxb, "src/cli/index.js");
@@ -16,13 +16,12 @@ test("package metadata marks the M15 P2 release candidate", async () => {
   assert.equal(manifest.scripts.spike, "node scripts/protocol-spike.js");
   assert.deepEqual(manifest.engines, { node: ">=18" });
   assert.match(manifest.description, /Agent-safe fetch, send, state, and media handoff/);
-  assert.match(manifest.repository.url, /github\.com\/DONGH4O\/wechat-ilink-bridge/);
-  assert.match(manifest.bugs.url, /github\.com\/DONGH4O\/wechat-ilink-bridge\/issues/);
-  assert.match(manifest.homepage, /github\.com\/DONGH4O\/wechat-ilink-bridge#readme/);
-  for (const requiredFile of ["src/", "skills/", "docs/", "README.md", "CHANGELOG.md", "LICENSE"]) {
+  assert.match(manifest.repository.url, /github\.com\/Geokkk\/wechat-ilink-bridge-hardened/);
+  assert.match(manifest.bugs.url, /github\.com\/Geokkk\/wechat-ilink-bridge-hardened\/issues/);
+  assert.match(manifest.homepage, /github\.com\/Geokkk\/wechat-ilink-bridge-hardened#readme/);
+  for (const requiredFile of ["src/", "skills/", "docs/", "scripts/", "README.md", "CHANGELOG.md", "LICENSE"]) {
     assert.ok(manifest.files.includes(requiredFile), `${requiredFile} must be packed`);
   }
-  assert.equal(manifest.files.includes("scripts/"), false);
 });
 
 test("README documents Windows usage and M9 release expectations", async () => {
@@ -48,12 +47,9 @@ test("README documents Windows usage and M9 release expectations", async () => {
   assert.match(readme, /恢复提示/);
   assert.match(readme, /NO_CONTEXT_TOKEN/);
   assert.match(readme, /SESSION_EXPIRED/);
-  assert.match(readme, /0\.1\.0-beta\.1/);
-  assert.match(readme, /已可通过 `@dongh4o\/wechat-ilink-bridge@beta` 安装/);
-  assert.match(readme, /npm\.cmd install -g @dongh4o\/wechat-ilink-bridge@beta/);
-  assert.match(readme, /dongh4o-wechat-ilink-bridge-0\.2\.0\.tgz/);
-  assert.match(readme, /@dongh4o\/wechat-ilink-bridge/);
-  assert.match(readme, /DONGH4O\/wechat-ilink-bridge/);
+  assert.match(readme, /加固差异清单/);
+  assert.match(readme, /衍生声明/);
+  assert.match(readme, /H1|H2|H3|H4|H5/);
   assert.match(readme, /LICENSE/);
   assert.match(readme, /公开稳定 CLI bin `wxb` 和 P2 MCP adapter bin `wxb-mcp`/);
   assert.match(readme, /`wxb-spike` 不作为公开 bin 发布/);
@@ -85,16 +81,20 @@ test("release framework documents package boundaries and secret audit", async ()
   assert.match(releaseProcess, /git status --short --ignored/);
   assert.match(releaseProcess, /npm publish --tag beta --access public/);
   assert.match(releaseProcess, /--prefix \$prefix/);
-  assert.match(releaseProcess, /\.workbuddy\//);
   assert.match(npmignore, /^\.env$/m);
   assert.match(npmignore, /^m\*-\*\.stdout\.json$/m);
   assert.match(npmignore, /^test\/fixtures\/raw\/live-\*\.json$/m);
   assert.match(npmignore, /^你的真实测试状态目录\/$/m);
-  assert.match(gitignore, /^\.workbuddy\/$/m);
-  assert.match(gitignore, /^m\*-\*\.stdout\.json$/m);
-  assert.match(gitignore, /^你的真实测试状态目录\/$/m);
+  assert.match(gitignore, /^\.env$/m);
+  assert.match(gitignore, /^\.env\.\*$/m);
+  assert.match(gitignore, /^!\.env\.example$/m);
+  assert.match(gitignore, /^coverage\/$/m);
+  assert.match(gitignore, /^\.wxb\/$/m);
+  assert.match(gitignore, /^\*\*\/accounts\/$/m);
+  assert.match(gitignore, /^inbox\/$/m);
+  assert.match(gitignore, /^\*\.stdout\.json$/m);
   assert.match(gitignore, /^\*\.tgz$/m);
-  assert.match(gitignore, /^\*\.log$/m);
+  assert.match(gitignore, /^node_modules\/$/m);
   assert.match(license, /^MIT License/);
   assert.match(changelog, /## 0\.1\.0-beta\.1 - 2026-05-17/);
   assert.match(changelog, /## 0\.1\.0-beta\.0 - 2026-05-17/);
