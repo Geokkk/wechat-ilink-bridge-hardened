@@ -218,7 +218,9 @@ export async function fetchMessages(options = {}) {
 
     await writeSyncBuffer(stateDir, account.accountId, nextBuffer);
 
-    const outputMessages = includeUntrusted ? newMessages : processedTrusted.map(stripInternalMessageFields);
+    const outputMessages = includeUntrusted
+      ? newMessages.map(stripInternalMessageFields)
+      : processedTrusted.map(stripInternalMessageFields);
     if (!includeUntrusted) {
       // For untrusted messages in default output, we don't include them at all
       // But we still need to mark them with trusted: true for trusted messages

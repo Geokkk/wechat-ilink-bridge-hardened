@@ -666,3 +666,58 @@ test("fetchMessages still triggers delayed delivery for trusted messages", async
     assert.equal(result.delayedDeliveries[0].sent[0].chars, "queued for owner".length);
   });
 });
+
+test("fetchMessages with includeUntrusted strips contextToken from all messages", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const client = fakeUpdatesClient([
+      {
+        ret: 0,
+        get_updates_buf: "cursor_include_untrusted",
+        msgs: [
+          {
+            msg_id: "msg_trusted",
+            from_user_id: "user_001",
+            to_user_id: "user_001",
+            context_token: "ctx_trusted_secret",
+            timestamp: 1715000000,
+            item_list: [{ type: 1, text_item: { text: "from owner" } }]
+          },
+          {
+            msg_id: "msg_untrusted",
+            from_user_id: "stranger_001",
+            to_user_id: "user_001",
+            context_token: "ctx_untrusted_secret",
+            timestamp: 1715000001,
+            item_list: [{ type: 1, text_item: { text: "from stranger" } }]
+          }
+        ]
+      }
+    ]);
+
+    const result = await fetchMessages({
+      stateDir,
+      client,
+      retry: { maxAttempts: 1 },
+      includeUntrusted: true
+    });
+
+    // Both messages should be in output with trusted flag
+    assert.equal(result.messages.length, 2);
+    const trustedMsg = result.messages.find((m) => m.id === "msg_trusted");
+    const untrustedMsg = result.messages.find((m) => m.id === "msg_untrusted");
+    assert.equal(trustedMsg.trusted, true);
+    assert.equal(untrustedMsg.trusted, false);
+
+    // contextToken must NOT be present in any output message
+    for (const msg of result.messages) {
+      assert.equal("contextToken" in msg, false);
+      assert.ok(!msg.hasOwnProperty("contextToken"));
+    }
+
+    // JSON serialization must not contain the raw context token values
+    const json = JSON.stringify(result);
+    assert.equal(json.includes("ctx_trusted_secret"), false);
+    assert.equal(json.includes("ctx_untrusted_secret"), false);
+  });
+});
