@@ -52,7 +52,7 @@ WeChat-iLink Bridge（`wxb`）是一个面向 AI Agent 的微信 iLink 本地桥
 
 ## M11 能力范围
 
-- `wxb send --file <path>`：AES-128-ECB 加密并上传本地文件，再发送给已有上下文的微信用户。
+- `wxb send --file <path>`：AES-128-ECB 加密并上传本地文件，再发送给已有上下文的微信用户。**支持 `.mp4` / `.mov` 视频文件，以文件附件形式送达（微信内可预览/下载，非内嵌视频消息）。**
 - `wxb send --image <path>`：校验本地图片 MIME，上传并发送图片消息。
 - `wxb send --typing`：发送前获取 `typing_ticket` 并显示输入状态，发送后尽力停止输入状态。
 - 本地文件不存在、目录路径、超过 `WX_MAX_UPLOAD_BYTES`、未知 MIME 或图片模式传入非图片文件时返回结构化错误。

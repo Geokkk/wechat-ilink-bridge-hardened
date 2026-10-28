@@ -8,7 +8,11 @@ This project follows semantic versioning after the first public package. Pre-`0.
 
 - No changes yet.
 
-## 0.2.0 - 2026-05-18
+## 0.3.1 - 2026-10-28
+
+- `wxb send --file` now supports `.mp4` (video/mp4) and `.mov` (video/quicktime) video files; they are sent as file attachments (viewable/downloaded in WeChat, not as embedded video messages).
+
+## 0.3.0 - 2026-10-27
 
 - Added M14 `wxb-mcp` stdio adapter with `fetchMessages`, `sendText`, `sendFile`, `listUsers`, and `status` tools.
 - Added MCP adapter tests and docs while preserving token-safe tool schemas and media handoff through local paths.

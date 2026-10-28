@@ -1,6 +1,6 @@
 {
   "name": "wechat-ilink-bridge-hardened",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": false,
   "type": "module",
   "description": "Hardened fork of DONGH4O/wechat-ilink-bridge (MIT). Local WeChat iLink Bridge CLI for Agent-safe fetch, send, state, and media handoff workflows.",

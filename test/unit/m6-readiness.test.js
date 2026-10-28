@@ -6,7 +6,7 @@ test("package metadata marks the M15 P2 release candidate", async () => {
   const manifest = JSON.parse(await readFile("package.json", "utf8"));
 
   assert.equal(manifest.name, "wechat-ilink-bridge-hardened");
-  assert.equal(manifest.version, "0.3.0");
+  assert.equal(manifest.version, "0.3.1");
   assert.equal(manifest.private, false);
   assert.equal(manifest.license, "MIT");
   assert.equal(manifest.bin.wxb, "src/cli/index.js");

@@ -331,3 +331,85 @@ test("sendMedia reports upload success metadata when sendmessage later fails", a
     assert.equal((await readMessageHistory(stateDir, "bot_media")).length, 0);
   });
 });
+
+test("sendMedia accepts .mp4 video file as file kind with correct MIME", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const filePath = path.join(stateDir, "video.mp4");
+    await writeFile(filePath, Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32]));
+    const client = fakeMediaClient();
+
+    const result = await sendMedia({
+      stateDir,
+      userId: "user_media",
+      filePath,
+      kind: "file",
+      client,
+      config: { maxUploadBytes: 1024, cdnBaseUrl: "https://upload.example/c2c" }
+    });
+
+    assert.equal(result.kind, "file");
+    assert.equal(result.fileName, "video.mp4");
+    assert.equal(result.mimeType, "video/mp4");
+    assert.equal(result.uploaded, true);
+    assert.equal(result.sent, true);
+
+    const sendCall = client.calls.sendMediaMessage[0];
+    assert.equal(sendCall.item.type, 4);
+    assert.equal(sendCall.item.file_item.file_name, "video.mp4");
+    assert.equal(sendCall.item.file_item.len, "12");
+  });
+});
+
+test("sendMedia accepts .mov video file as file kind with correct MIME", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const filePath = path.join(stateDir, "video.mov");
+    await writeFile(filePath, Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x71, 0x74, 0x20, 0x20]));
+    const client = fakeMediaClient();
+
+    const result = await sendMedia({
+      stateDir,
+      userId: "user_media",
+      filePath,
+      kind: "file",
+      client,
+      config: { maxUploadBytes: 1024, cdnBaseUrl: "https://upload.example/c2c" }
+    });
+
+    assert.equal(result.kind, "file");
+    assert.equal(result.fileName, "video.mov");
+    assert.equal(result.mimeType, "video/quicktime");
+    assert.equal(result.uploaded, true);
+    assert.equal(result.sent, true);
+
+    const sendCall = client.calls.sendMediaMessage[0];
+    assert.equal(sendCall.item.type, 4);
+    assert.equal(sendCall.item.file_item.file_name, "video.mov");
+    assert.equal(sendCall.item.file_item.len, "12");
+  });
+});
+
+test("sendMedia rejects .mp4 when passed as image kind", async () => {
+  await withTempDir(async (stateDir) => {
+    await seedAccount(stateDir);
+    const filePath = path.join(stateDir, "video.mp4");
+    await writeFile(filePath, Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6d, 0x70, 0x34, 0x32]));
+    const client = fakeMediaClient();
+
+    await assert.rejects(
+      sendMedia({
+        stateDir,
+        userId: "user_media",
+        filePath,
+        kind: "image",
+        client,
+        config: { maxUploadBytes: 1024 }
+      }),
+      (error) => {
+        assert.equal(error.code, "MEDIA_TYPE_UNSUPPORTED");
+        return true;
+      }
+    );
+  });
+});

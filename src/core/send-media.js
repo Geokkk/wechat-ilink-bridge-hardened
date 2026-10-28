@@ -22,6 +22,8 @@ const mimeByExtension = Object.freeze({
   ".png": "image/png",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".mp4": "video/mp4",
+  ".mov": "video/quicktime",
   ".pdf": "application/pdf",
   ".txt": "text/plain",
   ".md": "text/markdown",
